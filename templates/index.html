@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Email Spam Classifier — ML demo dashboard with Naive Bayes and TF-IDF">
+    <title>Email Spam Classifier | ML Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <canvas id="particles-canvas" aria-hidden="true"></canvas>
+
+    <!-- Spam Alert Overlay -->
+    <div id="spam-overlay" class="spam-overlay" role="alertdialog" aria-modal="true" aria-labelledby="spam-alert-title" aria-describedby="spam-alert-desc" hidden>
+        <div class="spam-overlay-bg" id="spam-overlay-bg"></div>
+        <div class="spam-alert-card" id="spam-alert-card">
+            <div class="spam-alert-icon-ring">
+                <div class="spam-alert-icon">🚨</div>
+            </div>
+            <h2 class="spam-alert-title" id="spam-alert-title">SPAM DETECTED</h2>
+            <p class="spam-alert-desc" id="spam-alert-desc">
+                This message has been identified as <strong>spam</strong>.<br>
+                Do not click any links or share personal information.
+            </p>
+            <div class="spam-alert-confidence" id="spam-alert-confidence"></div>
+            <div class="spam-alert-tips">
+                <div class="tip-item">⛔ Do not reply</div>
+                <div class="tip-item">🔗 Avoid clicking links</div>
+                <div class="tip-item">🔒 Never share passwords</div>
+            </div>
+            <div class="spam-alert-actions">
+                <button type="button" class="btn-alert-dismiss" id="spam-dismiss-btn">
+                    ✓ Got it, dismiss
+                </button>
+                <button type="button" class="btn-alert-mute" id="spam-mute-btn" title="Mute alarm sound">
+                    🔊
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite">
+        <span class="toast-icon" id="toast-icon">✓</span>
+        <span class="toast-msg" id="toast-msg">Done</span>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+        <a href="#" class="navbar-brand" aria-label="Home">
+            <div class="navbar-logo" aria-hidden="true">📧</div>
+            <div>
+                <div class="navbar-title">Spam Classifier</div>
+                <div class="navbar-subtitle">ML Engineering Demo</div>
+            </div>
+        </a>
+
+        <div class="navbar-actions">
+            <span class="model-status" id="model-status" title="Model readiness">
+                <span class="status-dot"></span>
+                <span class="status-text">Checking model…</span>
+            </span>
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme">
+                <span class="theme-icon-light" aria-hidden="true">☀️</span>
+                <span class="theme-icon-dark" aria-hidden="true">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- Hero -->
+        <header class="hero">
+            <h1>
+                <span class="gradient-text">Email Spam Classifier</span>
+            </h1>
+            <p>
+                Paste an email below to classify it in real time as spam or not spam.
+            </p>
+        </header>
+
+        <!-- Prediction -->
+        <section id="predict-section" class="section-gap">
+
+            <!-- Email Input card -->
+            <div class="glass-card animate-in delay-1" style="margin-bottom: 1.25rem;">
+                <div class="card-header">
+                    <div class="card-icon blue" aria-hidden="true">✉️</div>
+                    <div>
+                        <div class="card-title">Email Input</div>
+                        <div class="card-subtitle">Enter or paste message text · Ctrl+Enter to predict</div>
+                    </div>
+                </div>
+
+                <label for="email-input" class="sr-only">Email message text</label>
+                <textarea
+                    id="email-input"
+                    class="email-input"
+                    placeholder="Paste email content here…&#10;&#10;Example: Hello, meeting at 10 AM tomorrow."
+                    rows="6"
+                    spellcheck="true"
+                ></textarea>
+
+                <div class="input-meta">
+                    <span id="char-count">0 characters</span>
+                    <span class="input-hint">Tip: use sample chips below for a quick demo</span>
+                </div>
+
+                <div class="quick-tests">
+                    <div class="quick-tests-label">Sample messages</div>
+                    <div class="chips">
+                        <button type="button" class="chip spam-chip" data-sample="spam-win">🎁 Prize scam</button>
+                        <button type="button" class="chip spam-chip" data-sample="spam-urgent">⚠️ Urgent offer</button>
+                        <button type="button" class="chip" data-sample="ham-meeting">📅 Meeting</button>
+                        <button type="button" class="chip" data-sample="ham-casual">👋 Casual hello</button>
+                        <button type="button" class="chip chip-clear" data-sample="clear">Clear</button>
+                    </div>
+                </div>
+
+                <div class="action-row">
+                    <button type="button" class="btn-predict" id="predict-btn" aria-label="Classify email">
+                        <span class="spinner" aria-hidden="true"></span>
+                        <span class="btn-text">🔍 Predict</span>
+                    </button>
+                    <button type="button" class="btn-secondary" id="clear-btn" title="Clear input and result">Clear</button>
+                </div>
+
+                <div class="result-container" id="result-container" aria-live="polite">
+                    <div class="result-box" id="result-box">
+                        <div class="result-icon" id="result-icon" aria-hidden="true">✓</div>
+                        <div class="result-info">
+                            <div class="result-label" id="result-label">Not Spam Email</div>
+                            <div class="result-confidence" id="result-confidence">Confidence: —</div>
+                        </div>
+                        <div class="confidence-gauge">
+                            <div class="gauge-circle" id="gauge-circle">
+                                <span class="gauge-value" id="gauge-value">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="result-actions">
+                        <button type="button" class="btn-ghost" id="copy-result-btn" disabled>Copy result</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Log card -->
+            <div class="glass-card animate-in delay-2">
+                <div class="card-header">
+                    <div class="card-icon green" aria-hidden="true">📋</div>
+                    <div>
+                        <div class="card-title">Session Log</div>
+                        <div class="card-subtitle">Recent predictions during this session</div>
+                    </div>
+                </div>
+                <ul class="session-log" id="session-log" aria-label="Prediction history">
+                    <li class="session-empty">No predictions yet. Run a test above.</li>
+                </ul>
+
+                <div class="dataset-info" style="margin-top: 1.5rem;">
+                    <div class="dataset-stat">
+                        <div class="value" id="ds-total">—</div>
+                        <div class="label">Total samples</div>
+                    </div>
+                    <div class="dataset-divider" aria-hidden="true"></div>
+                    <div class="dataset-stat">
+                        <div class="value" id="ds-spam">—</div>
+                        <div class="label">Spam</div>
+                    </div>
+                    <div class="dataset-divider" aria-hidden="true"></div>
+                    <div class="dataset-stat">
+                        <div class="value" id="ds-ham">—</div>
+                        <div class="label">Ham</div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Charts -->
+        <section id="metrics-section" class="grid-2 section-gap">
+            <div class="glass-card animate-in delay-2">
+                <div class="card-header">
+                    <div class="card-icon purple" aria-hidden="true">🔥</div>
+                    <div>
+                        <div class="card-title">Confusion Matrix</div>
+                        <div class="card-subtitle">Actual vs predicted labels on test set</div>
+                    </div>
+                </div>
+                <div class="cm-table-wrapper" id="cm-table-wrapper">
+                    <table class="cm-table" aria-label="Confusion matrix">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Pred Ham</th>
+                                <th>Pred Spam</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cm-body">
+                            <tr>
+                                <th>Actual Ham</th>
+                                <td class="cm-cell-tn" id="cm-tn">—</td>
+                                <td class="cm-cell-fp" id="cm-fp">—</td>
+                            </tr>
+                            <tr>
+                                <th>Actual Spam</th>
+                                <td class="cm-cell-fn" id="cm-fn">—</td>
+                                <td class="cm-cell-tp" id="cm-tp">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="chart-wrapper" style="margin-top: 0.5rem;">
+                    <img src="{{ url_for('static', filename='confusion_matrix.png') }}" alt="Confusion matrix heatmap" id="cm-image" style="max-width: 100%; border-radius: 8px; display: none;">
+                </div>
+            </div>
+
+            <div class="glass-card animate-in delay-3">
+                <div class="card-header">
+                    <div class="card-icon cyan" aria-hidden="true">📊</div>
+                    <div>
+                        <div class="card-title">Model Performance</div>
+                        <div class="card-subtitle">Accuracy, Precision, Recall, F1 Score (%)</div>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="performance-chart" aria-label="Model performance bar chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+
+    </main>
+
+    <script>
+        /* ── Sample messages for demo ── */
+        const SAMPLES = {
+            'spam-win': 'Congratulations!! You won ₹50,000. Click here to claim your prize now!!!',
+            'spam-urgent': 'URGENT: Your account will be suspended. Verify immediately at http://fake-bank.com',
+            'ham-meeting': 'Hello,\n\nMeeting at 10 AM tomorrow in Conference Room B.\n\nThanks,\nTeam',
+            'ham-casual': 'Hey, how are you? Hope you had a great weekend. Let me know when you are free.',
+            clear: ''
+        };
+
+        let performanceChart = null;
+        let lastResult = null;
+        const MAX_LOG = 8;
+
+        /* ── Theme (default light for work / presentations) ── */
+        const themeToggle = document.getElementById('theme-toggle');
+        const savedTheme = localStorage.getItem('spam-classifier-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('spam-classifier-theme', next);
+            if (performanceChart) updateChartTheme();
+        });
+
+        /* ── Particles (disabled in light / reduced-motion) ── */
+        function initParticles() {
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            if (document.documentElement.getAttribute('data-theme') === 'light') return;
+
+            const canvas = document.getElementById('particles-canvas');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            const count = 40;
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    r: Math.random() * 2 + 0.5,
+                    dx: (Math.random() - 0.5) * 0.3,
+                    dy: (Math.random() - 0.5) * 0.3
+                });
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.35)';
+                particles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                    p.x += p.dx;
+                    p.y += p.dy;
+                    if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+                    if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+                });
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+        initParticles();
+
+        /* ── Toast ── */
+        function showToast(msg, icon = '✓') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            document.getElementById('toast-icon').textContent = icon;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3200);
+        }
+
+        /* ── Metrics ── */
+        function setStat(id, barId, value) {
+            const el = document.getElementById(id);
+            const bar = document.getElementById(barId);
+            if (!el || !bar) return;
+            if (value == null) {
+                el.textContent = '—';
+                bar.style.width = '0%';
+                bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', '0');
+                return;
+            }
+            el.textContent = value.toFixed(1) + '%';
+            const pct = Math.min(value, 100);
+            requestAnimationFrame(() => {
+                bar.style.width = pct + '%';
+                bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', pct.toFixed(1));
+            });
+        }
+
+        function chartColors() {
+            const light = document.documentElement.getAttribute('data-theme') === 'light';
+            return {
+                grid: light ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.1)',
+                text: light ? '#475569' : '#94a3b8',
+                bars: ['#1a73e8', '#0ea5e9', '#7c3aed', '#0d9488']
+            };
+        }
+
+        function buildPerformanceChart(metrics) {
+            const ctx = document.getElementById('performance-chart');
+            const c = chartColors();
+            const data = [
+                metrics.accuracy,
+                metrics.precision,
+                metrics.recall,
+                metrics.f1_score
+            ];
+
+            if (performanceChart) performanceChart.destroy();
+
+            performanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Accuracy', 'Precision', 'Recall', 'F1 Score'],
+                    datasets: [{
+                        label: 'Score (%)',
+                        data,
+                        backgroundColor: c.bars.map(b => b + 'cc'),
+                        borderColor: c.bars,
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ctx.parsed.y.toFixed(2) + '%'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: c.grid },
+                            ticks: { color: c.text, callback: v => v + '%' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: c.text, font: { weight: '600', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChartTheme() {
+            fetch('/metrics').then(r => r.ok ? r.json() : null).then(m => {
+                if (m && !m.error) buildPerformanceChart(m);
+            });
+        }
+
+        function setModelStatus(ready, detail) {
+            const el = document.getElementById('model-status');
+            el.classList.toggle('ready', ready);
+            el.classList.toggle('error', !ready);
+            el.querySelector('.status-text').textContent = detail;
+        }
+
+        async function loadMetrics() {
+            try {
+                const res = await fetch('/metrics');
+                if (!res.ok) throw new Error('Run train.py first');
+                const m = await res.json();
+                if (m.error) throw new Error(m.error);
+
+                setModelStatus(true, 'Model ready');
+                setStat('stat-accuracy', 'bar-accuracy', m.accuracy);
+                setStat('stat-precision', 'bar-precision', m.precision);
+                setStat('stat-recall', 'bar-recall', m.recall);
+                setStat('stat-f1', 'bar-f1', m.f1_score);
+
+                document.getElementById('ds-total')?.setAttribute('textContent', m.total_samples?.toLocaleString() ?? '—');
+                const dsTotal = document.getElementById('ds-total');
+                if (dsTotal) dsTotal.textContent = m.total_samples?.toLocaleString() ?? '—';
+                const dsSpam = document.getElementById('ds-spam');
+                if (dsSpam) dsSpam.textContent = m.spam_count?.toLocaleString() ?? '—';
+                const dsHam = document.getElementById('ds-ham');
+                if (dsHam) dsHam.textContent = m.ham_count?.toLocaleString() ?? '—';
+
+                if (m.confusion_matrix) {
+                    const [[tn, fp], [fn, tp]] = m.confusion_matrix;
+                    document.getElementById('cm-tn').textContent = tn;
+                    document.getElementById('cm-fp').textContent = fp;
+                    document.getElementById('cm-fn').textContent = fn;
+                    document.getElementById('cm-tp').textContent = tp;
+                }
+
+                const cmImg = document.getElementById('cm-image');
+                cmImg.onload = () => { cmImg.style.display = 'block'; };
+                cmImg.onerror = () => { cmImg.style.display = 'none'; };
+                cmImg.src = cmImg.src.split('?')[0] + '?t=' + Date.now();
+
+                buildPerformanceChart(m);
+            } catch (e) {
+                setModelStatus(false, 'Train model first');
+                showToast('Run: py train.py to load metrics', '⚠️');
+            }
+        }
+
+        /* ── Prediction ── */
+        const emailInput = document.getElementById('email-input');
+        const predictBtn = document.getElementById('predict-btn');
+        const resultContainer = document.getElementById('result-container');
+        const resultBox = document.getElementById('result-box');
+        const copyBtn = document.getElementById('copy-result-btn');
+
+        emailInput.addEventListener('input', () => {
+            document.getElementById('char-count').textContent =
+                emailInput.value.length.toLocaleString() + ' characters';
+        });
+
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const key = chip.dataset.sample;
+                if (key === 'clear') {
+                    emailInput.value = '';
+                } else {
+                    emailInput.value = SAMPLES[key] || '';
+                }
+                emailInput.dispatchEvent(new Event('input'));
+                emailInput.focus();
+            });
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            emailInput.value = '';
+            emailInput.dispatchEvent(new Event('input'));
+            resultContainer.classList.remove('visible');
+            copyBtn.disabled = true;
+            lastResult = null;
+        });
+
+        /* ── Spam Alert System ── */
+        let audioCtx = null;
+        let alarmInterval = null;
+        let isMuted = false;
+
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+
+        function playAlarmBeep() {
+            if (isMuted) return;
+            try {
+                const ctx = getAudioCtx();
+                const freqs = [880, 660, 880, 660];
+                let time = ctx.currentTime;
+                freqs.forEach(freq => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, time);
+                    gain.gain.setValueAtTime(0.18, time);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+                    osc.start(time);
+                    osc.stop(time + 0.18);
+                    time += 0.2;
+                });
+            } catch (_) {}
+        }
+
+        function startAlarm() {
+            playAlarmBeep();
+            alarmInterval = setInterval(playAlarmBeep, 1400);
+        }
+
+        function stopAlarm() {
+            clearInterval(alarmInterval);
+            alarmInterval = null;
+        }
+
+        function flashScreen() {
+            const flash = document.createElement('div');
+            flash.style.cssText = 'position:fixed;inset:0;background:rgba(239,68,68,0.25);z-index:9998;pointer-events:none;animation:flashFade 0.6s ease forwards;';
+            document.body.appendChild(flash);
+            setTimeout(() => flash.remove(), 650);
+        }
+
+        function showSpamAlert(confidence) {
+            flashScreen();
+            setTimeout(flashScreen, 300);
+
+            document.getElementById('spam-alert-confidence').textContent =
+                'Confidence: ' + confidence + '%';
+            const overlay = document.getElementById('spam-overlay');
+            overlay.hidden = false;
+            overlay.removeAttribute('hidden');
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            document.getElementById('spam-dismiss-btn').focus();
+            startAlarm();
+        }
+
+        function dismissSpamAlert() {
+            const overlay = document.getElementById('spam-overlay');
+            overlay.classList.remove('active');
+            overlay.classList.add('closing');
+            stopAlarm();
+            setTimeout(() => {
+                overlay.hidden = true;
+                overlay.classList.remove('closing');
+                document.body.style.overflow = '';
+            }, 400);
+        }
+
+        document.getElementById('spam-dismiss-btn').addEventListener('click', dismissSpamAlert);
+
+        document.getElementById('spam-mute-btn').addEventListener('click', () => {
+            isMuted = !isMuted;
+            document.getElementById('spam-mute-btn').textContent = isMuted ? '🔇' : '🔊';
+            if (isMuted) stopAlarm();
+            else startAlarm();
+        });
+
+        // Dismiss on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !document.getElementById('spam-overlay').hidden) {
+                dismissSpamAlert();
+            }
+        });
+
+        // Dismiss on backdrop click
+        document.getElementById('spam-overlay-bg').addEventListener('click', dismissSpamAlert);
+
+        async function runPredict() {
+            const email = emailInput.value.trim();
+            if (!email) {
+                showToast('Please enter email text', '⚠️');
+                emailInput.focus();
+                return;
+            }
+
+            predictBtn.classList.add('loading');
+            try {
+                const res = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Prediction failed');
+
+                lastResult = data;
+                resultContainer.classList.add('visible');
+                resultBox.className = 'result-box ' + (data.is_spam ? 'spam' : 'not-spam');
+                document.getElementById('result-icon').textContent = data.is_spam ? '🚫' : '✅';
+                document.getElementById('result-label').textContent = data.result;
+                document.getElementById('result-confidence').textContent =
+                    'Confidence: ' + data.confidence + '%';
+                document.getElementById('gauge-value').textContent = data.confidence + '%';
+                copyBtn.disabled = false;
+
+                addSessionLog(email, data);
+
+                // Fire spam alert
+                if (data.is_spam) showSpamAlert(data.confidence);
+            } catch (e) {
+                showToast(e.message, '❌');
+            } finally {
+                predictBtn.classList.remove('loading');
+            }
+        }
+
+        predictBtn.addEventListener('click', runPredict);
+        emailInput.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runPredict();
+            }
+        });
+
+        copyBtn.addEventListener('click', async () => {
+            if (!lastResult) return;
+            const text = lastResult.result + ' (' + lastResult.confidence + '% confidence)';
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Result copied to clipboard');
+            } catch {
+                showToast('Could not copy', '⚠️');
+            }
+        });
+
+        function addSessionLog(email, data) {
+            const log = document.getElementById('session-log');
+            const empty = log.querySelector('.session-empty');
+            if (empty) empty.remove();
+
+            const li = document.createElement('li');
+            li.className = 'session-item ' + (data.is_spam ? 'spam' : 'ham');
+            const preview = email.length > 48 ? email.slice(0, 48) + '…' : email;
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            li.innerHTML =
+                '<span class="session-badge">' + (data.is_spam ? 'Spam' : 'Ham') + '</span>' +
+                '<span class="session-preview" title="' + escapeHtml(email) + '">' + escapeHtml(preview) + '</span>' +
+                '<span class="session-meta">' + data.confidence + '% · ' + time + '</span>';
+            log.prepend(li);
+
+            while (log.children.length > MAX_LOG) log.removeChild(log.lastChild);
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        loadMetrics();
+    </script>
+</body>
+</html>

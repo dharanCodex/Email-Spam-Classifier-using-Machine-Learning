@@ -1,0 +1,21 @@
+{
+  "accuracy": 97.22,
+  "precision": 99.24,
+  "recall": 81.37,
+  "f1_score": 89.42,
+  "confusion_matrix": [
+    [
+      953,
+      1
+    ],
+    [
+      30,
+      131
+    ]
+  ],
+  "total_samples": 5574,
+  "train_samples": 4459,
+  "test_samples": 1115,
+  "spam_count": 747,
+  "ham_count": 4827
+}
